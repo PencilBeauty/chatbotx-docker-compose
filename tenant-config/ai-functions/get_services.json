@@ -1,0 +1,7 @@
+{
+  "name": "get_services",
+  "purpose": "Call when the guest asks what services we offer, how long a service takes, or asks a service's price. Returns the salon's live service catalog from ERP.",
+  "dataCollect": [],
+  "outputMessage": "{{erp_services_json}}",
+  "_triggerFlowName": "get_services — ERP services"
+}

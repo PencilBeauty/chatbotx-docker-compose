@@ -1,3 +1,5 @@
 /dev/.chatbotx/
 
 .env
+
+tenant-config/.env
