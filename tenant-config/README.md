@@ -10,9 +10,14 @@ builder; these files are the spec to review or rebuild from.
 
 ## Set up once (UI)
 0. Settings → Integrations: Groq (OpenAI Compatible) is the model used everywhere. A Google Gemini key is connected only to unlock AI Agents (ChatbotX ignores OpenAI-Compatible providers when unlocking).
-1. **Flows → Import Flow** → `flows/get_services.chatbotx-flow.json`. Check Import history = Success 1. Nothing to build by hand.
-2. **AI Agents → AI Functions → + Create AI Function** from `ai-functions/get_services.json`; **Trigger Flow ID** = the imported flow.
-3. **AI Agents → + Create AI Agent** from `ai-agents/salon.json`; model Groq `openai/gpt-oss-120b`; **Tools → Function** `get_services`.
+1. **Flows → Import Flow** → `flows/get_services.chatbotx-flow.json` and `flows/get_offerings.chatbotx-flow.json`; **Publish** each (import creates a draft only). Check Import history = Success 1. Nothing to build by hand.
+2. **AI Agents → AI Functions → + Create AI Function** from `ai-functions/get_services.json` and `ai-functions/get_offerings.json`; **Trigger Flow ID** = the imported flow.
+3. **AI Agents → + Create AI Agent** from `ai-agents/salon.json`; model Groq `openai/gpt-oss-120b`; **Tools → Function** `get_services` + `get_offerings`.
 
 ## What it does (SCRUM-393)
 Flow calls `GET /v1/public/services` (header `X-Tenant-ID`), maps `content` → custom field `erp_services_json`. The flow's AI Generate Text step (Groq) writes the VI/EN answer from that list only and sends it; the Agent never invents a price (ERP has no price field — SCRUM-391). Full runbook: Confluence page 39682059.
+
+## Two catalogs
+- `get_services` → `/public/services`: bookable services with duration, no price.
+- `get_offerings` → `/public/offering-variants`: priced menu items (`service_id` may be null). Kept separate so prices are never attached to a bookable service by guesswork.
+- Both point at **nonprod** for now; switch base URL + `X-Tenant-ID` together when moving to prod.

@@ -6,6 +6,7 @@
   "maxOutputTokens": 2048,
   "_tools": [
     "get_services",
+    "get_offerings",
     "system:Connect user to Human"
   ]
 }
