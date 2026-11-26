@@ -13,13 +13,13 @@ x-depends-datastores: &depends-datastores
 
 x-environment: &common-vars
   BETTER_AUTH_SECRET: VLu1KcS63DTTnZU3Dh/ykI9Ld26YQXy/1IMJdZf/kHI=
-  BETTER_AUTH_URL: http://localhost:3123
+  BETTER_AUTH_URL: ${BETTER_AUTH_URL}
   DATABASE_URL: postgresql://chatbotx:secretkey@postgres:5432/chatbotx?schema:public
   ENCRYPTION_KEY: 51112f8099c4597dff033d2d94c2f4bde95802d3027ecd0944b7647a8861e53e
   JAVASCRIPT_EXECUTOR_URL: http://javascript-executor:3210
   JAVASCRIPT_EXECUTOR_TOKEN: ${JAVASCRIPT_EXECUTOR_TOKEN:-change-me-in-production-at-least-32-chars}
-  NEXT_PUBLIC_ASSET_URL: http://localhost:9000/chatbotx/
-  NEXT_PUBLIC_BUILDER_URL: http://localhost:3123
+  NEXT_PUBLIC_ASSET_URL: https://bot.pencilnails.com/chatbotx/
+  NEXT_PUBLIC_BUILDER_URL: ${NEXT_PUBLIC_BUILDER_URL}
   NEXT_PUBLIC_EDITION: community
   NODE_OPTIONS: "--max_old_space_size=4096"
   REALTIME_API_KEY: secretkey
@@ -35,6 +35,7 @@ x-environment: &common-vars
   SCHEDULER_BUCKET_RANGE: 0-255
   SMTP_FROM: no-reply@localhost
   SMTP_SERVER: smtp://username:password@localhost:1025
+  PLATFORM_ADMIN_EMAIL: demo@example.com
 
 x-worker: &worker
   <<: [ *network, *depends-datastores ]
