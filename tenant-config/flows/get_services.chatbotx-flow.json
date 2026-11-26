@@ -1,7 +1,10 @@
 {
   "formatVersion": 2,
   "exportedAt": "2026-11-26T00:00:00.000Z",
-  "source": { "workspaceId": "11797743065898183", "flowId": "0" },
+  "source": {
+    "workspaceId": "11797743065898183",
+    "flowId": "0"
+  },
   "flows": [
     {
       "name": "get_services — ERP services",
@@ -11,24 +14,85 @@
       "nodes": [
         {
           "id": "100",
-          "type": "performAction",
-          "position": { "x": 100, "y": 100 },
-          "measured": { "width": 288, "height": 100 },
+          "type": "sendMessage",
+          "position": {
+            "x": 100,
+            "y": 100
+          },
+          "measured": {
+            "width": 288,
+            "height": 100
+          },
           "data": {
-            "name": "Fetch ERP services",
+            "name": "Answer service question",
             "isStartNode": true,
             "details": {
+              "beforeStep": {
+                "id": "101",
+                "stepType": "chooseChannel",
+                "channel": "omnichannel"
+              },
               "steps": [
                 {
                   "id": "200",
                   "stepType": "callApi",
                   "method": "GET",
                   "url": "https://salon-backend-1ui7.onrender.com/api/v1/public/services",
-                  "headers": [ { "key": "X-Tenant-ID", "value": "c573f47b-f4a3-42b6-91ce-e8b6534116fa" } ],
-                  "mapping": [ { "jsonPath": "$.content", "outputFieldId": "900001" } ],
-                  "states": [ { "id": "301", "stateType": "success" }, { "id": "302", "stateType": "error" } ]
+                  "headers": [
+                    {
+                      "key": "X-Tenant-ID",
+                      "value": "c573f47b-f4a3-42b6-91ce-e8b6534116fa"
+                    }
+                  ],
+                  "mapping": [
+                    {
+                      "jsonPath": "$.content",
+                      "outputFieldId": "900001"
+                    }
+                  ],
+                  "states": [
+                    {
+                      "id": "201",
+                      "stateType": "success"
+                    },
+                    {
+                      "id": "202",
+                      "stateType": "error"
+                    }
+                  ]
+                },
+                {
+                  "id": "210",
+                  "stepType": "aiGenerateText",
+                  "provider": "openaiCompatible",
+                  "integrationId": "11798083360056165",
+                  "model": "qwen/qwen3.8-27b",
+                  "system": "",
+                  "text": "Guest question: {{last_input}}\nERP service list (JSON): {{erp_services_json}}\nAnswer ONLY from this list (service name and duration_minutes, in minutes). If the question asks for something the list doesn't contain, such as a price, say you can't confirm it in chat and offer to book.\nReply in the same language as the question (Vietnamese or English).",
+                  "outputFieldId": "900002",
+                  "tools": [],
+                  "remember": false,
+                  "temperature": 0.2,
+                  "maxOutputTokens": 800,
+                  "states": [
+                    {
+                      "id": "211",
+                      "stateType": "success"
+                    },
+                    {
+                      "id": "212",
+                      "stateType": "error"
+                    }
+                  ]
+                },
+                {
+                  "id": "220",
+                  "stepType": "sendText",
+                  "text": "{{erp_services_reply}}",
+                  "buttons": []
                 }
-              ]
+              ],
+              "quickReplies": []
             }
           }
         }
@@ -36,6 +100,15 @@
       "edges": []
     }
   ],
-  "customFields": { "900001": { "name": "erp_services_json", "type": "longText" } },
+  "customFields": {
+    "900001": {
+      "name": "erp_services_json",
+      "type": "longText"
+    },
+    "900002": {
+      "name": "erp_services_reply",
+      "type": "longText"
+    }
+  },
   "botFields": {}
 }

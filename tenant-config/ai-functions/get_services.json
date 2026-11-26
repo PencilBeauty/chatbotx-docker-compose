@@ -1,7 +1,7 @@
 {
   "name": "get_services",
-  "purpose": "Call when the guest asks what services we offer, how long a service takes, or asks a price. Pass the guest's full question.",
-  "dataCollect": [{ "from": "question", "to": "erp_question" }],
+  "purpose": "Call when the guest asks what services we offer, how long a service takes, or asks a price.",
+  "dataCollect": [],
   "outputMessage": "",
   "_triggerFlowName": "get_services — ERP services"
 }
