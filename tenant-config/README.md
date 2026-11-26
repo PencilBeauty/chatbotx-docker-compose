@@ -25,4 +25,4 @@ Flow calls `GET /v1/public/services` (header `X-Tenant-ID`), maps `content` → 
 ## Prompts (where each one lives)
 - `ai-agents/salon.json` `prompt` → agent **System Message**: general rules only (scope, facts-from-tools, style). Names no tools; tool choice comes from each function's Purpose.
 - Each flow's AI Generate Text step: `system` → UI **Prompt (optional)** = shared style block (identical in both flows); `text` → UI **User message** = question + ERP data + tool-specific instruction. This step writes the reply the customer actually sees.
-- Keep the style ("bạn"/"mình", no markdown) identical in the agent prompt and both flow `system` blocks.
+- Keep the style (reply in the customer's language, polite neutral address, no markdown) identical in the agent prompt and both flow `system` blocks.

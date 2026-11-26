@@ -67,7 +67,7 @@
                   "provider": "openaiCompatible",
                   "integrationId": "11798083360056165",
                   "model": "openai/gpt-oss-120b",
-                  "system": "You write one Messenger reply for Pencil Beauty, a nail salon. Friendly and brief. Call the customer \"bạn\" and yourself \"mình\". Reply in the customer's language. Use only the data given: never add, rename, comment on or estimate items. Plain text, one item per line, no markdown.",
+                  "system": "You write one Messenger reply for Pencil Beauty, a nail salon. Write the whole reply in the same language as the customer's message, whatever that language is. Keep item names exactly as in the data. Friendly, brief and polite, with a respectful form of address natural for that language. Use only the data given: never add, rename, comment on or estimate items. Plain text, one item per line, no markdown.",
                   "text": "Customer message: {{last_input}}\nPrice list (JSON, price in VND): {{erp_offerings_json}}\nGive the price of the items that match the message. If none match, say there is no exact item, list up to 5 closest items with their prices, and offer to book or connect with staff. If the list is empty, say you can't confirm prices right now and offer to connect them with staff.",
                   "outputFieldId": "900004",
                   "tools": [],
