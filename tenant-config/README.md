@@ -21,3 +21,8 @@ Flow calls `GET /v1/public/services` (header `X-Tenant-ID`), maps `content` → 
 - `get_services` → `/public/services`: bookable services with duration, no price.
 - `get_offerings` → `/public/offering-variants`: priced menu items (`service_id` may be null). Kept separate so prices are never attached to a bookable service by guesswork.
 - Both point at **nonprod** for now; switch base URL + `X-Tenant-ID` together when moving to prod.
+
+## Prompts (where each one lives)
+- `ai-agents/salon.json` `prompt` → agent **System Message**: general rules only (scope, facts-from-tools, style). Names no tools; tool choice comes from each function's Purpose.
+- Each flow's AI Generate Text step: `system` → UI **Prompt (optional)** = shared style block (identical in both flows); `text` → UI **User message** = question + ERP data + tool-specific instruction. This step writes the reply the customer actually sees.
+- Keep the style ("bạn"/"mình", no markdown) identical in the agent prompt and both flow `system` blocks.
