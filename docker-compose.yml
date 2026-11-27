@@ -54,7 +54,7 @@ x-rustfs-environment: &rustfs-environment
 services:
   postgres:
     <<: *network
-    image: timescale/timescaledb-ha:pg18.4-ts2.27.2-all
+    image: timescale/timescaledb-ha:pg18.4-ts2.27.2
     ports:
       - "5432:5432"
     volumes:
