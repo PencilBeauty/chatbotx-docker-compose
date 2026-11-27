@@ -5,10 +5,6 @@
   "temperature": 0.4,
   "maxOutputTokens": 2048,
   "_tools": [
-    "get_services",
-    "get_offerings",
-    "get_branches",
-    "check_availability",
     "system:Connect user to Human"
   ]
 }

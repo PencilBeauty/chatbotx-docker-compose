@@ -1,7 +1,0 @@
-{
-  "name": "get_services",
-  "purpose": "Call when the guest asks what services can be booked or how long a service takes, and before check_availability to find the service_id.",
-  "dataCollect": [],
-  "outputMessage": "Bookable services (JSON: service_id, name, duration_minutes, status): {{erp_services_json}}\nOnly ACTIVE services can be booked. If the guest's words fit several services, ask which one they mean.\nERP_UNAVAILABLE: the list could not be loaded; say you can't check right now and offer staff.",
-  "_triggerFlowName": "get_services — ERP services"
-}

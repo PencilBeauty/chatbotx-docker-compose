@@ -1,7 +1,0 @@
-{
-  "name": "get_branches",
-  "purpose": "Call when the guest asks about branches, addresses, opening hours or which branch is nearest, and before check_availability to find the branch_id.",
-  "dataCollect": [],
-  "outputMessage": "Branches (JSON: branch_id, branch_name, branch_address, open_time, close_time, status): {{erp_branches_json}}\nOnly ACTIVE branches take bookings. Guests often shorten branch names (initials of the street, missing accents).\nERP_UNAVAILABLE: the list could not be loaded; say you can't check right now and offer staff.",
-  "_triggerFlowName": "get_branches — ERP branches"
-}
