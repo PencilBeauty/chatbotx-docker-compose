@@ -22,14 +22,23 @@ Flow calls `GET /v1/public/services` (header `X-Tenant-ID`), maps `content` → 
 - `get_offerings` → `/public/offering-variants`: priced menu items (`service_id` may be null). Kept separate so prices are never attached to a bookable service by guesswork.
 - Both point at **nonprod** for now; switch base URL + `X-Tenant-ID` together when moving to prod.
 
-## Prompts (where each one lives)
-- `ai-agents/salon.json` `prompt` → agent **System Message**: general rules only (scope, facts-from-tools, style). Names no tools; tool choice comes from each function's Purpose.
-- Each flow's AI Generate Text step: `system` → UI **Prompt (optional)** = shared style block (identical in both flows); `text` → UI **User message** = question + ERP data + tool-specific instruction. This step writes the reply the customer actually sees.
-- Voice: the guest-facing steps of `check_availability` use the front-desk-staff style block (natural address for the guest's language and culture, no raw system names, no markdown), and the agent `Style:` line carries the same wording. `get_services` / `get_offerings` still use the older neutral style block.
-- Agent prompt changes: copy `ai-agents/salon.json` `prompt` into the agent System Message (agents are not importable), so the file stays the source of truth.
+## How it works (SCRUM-394, patched worker)
+Needs the patched worker image `ghcr.io/pencilbeauty/chatbotx-worker:1.23.0-pencil.1` (see `docker-compose.yml`, Confluence page 39420011). With it, an AI Function whose **Output message contains a `{{variable}}`** runs its Trigger Flow inline and returns the resolved Output message to the agent; nothing is sent to the guest by the flow. Upstream images ignore this and send the Output message as text.
 
-## check_availability (SCRUM-394)
-- Needs core-backend `GET /v1/public/bookings/availability/slots?branchId=&serviceId=&date=&guestCount=` -> `{"slots":[...]}` deployed first. The older `/bookings/availability` returns a root array, which Response Mapping (dot-prop) cannot store.
-- Import `flows/check_availability.chatbotx-flow.json`, **Publish**, create the AI Function from `ai-functions/check_availability.json` (Trigger Flow ID = imported flow), add it to the agent's Tools.
-- Flow: services + branches -> AI step resolves names and relative dates to `avail_query` (or `AMBIGUOUS` / `NOMATCH`) -> slots call -> AI reply. Slots call error (timeout, 4xx/5xx, `AMBIGUOUS`/`NOMATCH` -> 400; AMBIGUOUS asks which service) and resolver error go to the "Availability check failed" node, so an API failure is never reported as "no free slots". `{"slots":[]}` is always written, so an old result is never reused.
-- Missing values: the AI Function's Purpose makes the agent ask only for what is missing before calling; a changed value triggers a new call.
+- Flows only fetch data: `setCustomField` writes `ERP_UNAVAILABLE` first, then one `callApi` maps the ERP payload into a custom field. A failed call leaves `ERP_UNAVAILABLE`, so an outage is never read as "no data". No AI step, no `sendText`.
+- The agent writes every reply. Voice and general rules live only in the agent prompt; it also gets `Current time: {{current_user_time}}` to resolve "mai", "thứ 7".
+- Each AI Function carries its own rules: **Purpose** = when to call; **Output message** = the data plus how to read it (empty list, `ERP_UNAVAILABLE`).
+- Booking lookup: agent calls `get_services` (service_id) and `get_branches` (branch_id), then `check_availability(service_id, branch_id, date YYYY-MM-DD, guests)` -> `GET /v1/public/bookings/availability/slots`.
+
+| Function | Flow file | Custom field | ERP endpoint |
+|---|---|---|---|
+| get_services | flows/get_services | erp_services_json | /v1/public/services |
+| get_offerings | flows/get_offerings | erp_offerings_json | /v1/public/offering-variants |
+| get_branches | flows/get_branches | erp_branches_json | /v1/public/branches |
+| check_availability | flows/check_availability | avail_slots_json (+ avail_service, avail_branch, avail_date, avail_guests) | /v1/public/bookings/availability/slots |
+
+## Apply a change
+1. Flows → Import Flow → the changed file; **Publish** (import creates a new draft flow).
+2. AI Functions: set Purpose / Data collect / Output message from `ai-functions/<name>.json`; **Trigger Flow ID** = the new flow; archive the old flow.
+3. Agent: copy `ai-agents/salon.json` `prompt` into the System Message (agents are not importable); Tools = the `_tools` list.
+4. Delete Message History on the test conversation, then test.

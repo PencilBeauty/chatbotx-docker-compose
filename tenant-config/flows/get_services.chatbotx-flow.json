@@ -24,7 +24,7 @@
             "height": 100
           },
           "data": {
-            "name": "Answer service question",
+            "name": "Load services",
             "isStartNode": true,
             "details": {
               "beforeStep": {
@@ -33,6 +33,13 @@
                 "channel": "omnichannel"
               },
               "steps": [
+                {
+                  "id": "190",
+                  "stepType": "setCustomField",
+                  "inputFieldId": "900001",
+                  "operation": "O01",
+                  "value": "ERP_UNAVAILABLE"
+                },
                 {
                   "id": "200",
                   "stepType": "callApi",
@@ -60,36 +67,6 @@
                       "stateType": "error"
                     }
                   ]
-                },
-                {
-                  "id": "210",
-                  "stepType": "aiGenerateText",
-                  "provider": "openaiCompatible",
-                  "integrationId": "11798083360056165",
-                  "model": "openai/gpt-oss-120b",
-                  "system": "You write one Messenger reply for Pencil Beauty, a nail salon. Write the whole reply in the same language as the customer's message, whatever that language is. Keep item names exactly as in the data. Friendly, brief and polite, with a respectful form of address natural for that language. Use only the data given: never add, rename, comment on or estimate items. Plain text, one item per line, no markdown.",
-                  "text": "Customer message: {{last_input}}\nBookable services (JSON, duration_minutes in minutes): {{erp_services_json}}\nList the services relevant to the message with their duration. If the list is empty, say you can't confirm the services right now and offer to connect them with staff.",
-                  "outputFieldId": "900002",
-                  "tools": [],
-                  "remember": false,
-                  "temperature": 0.2,
-                  "maxOutputTokens": 800,
-                  "states": [
-                    {
-                      "id": "211",
-                      "stateType": "success"
-                    },
-                    {
-                      "id": "212",
-                      "stateType": "error"
-                    }
-                  ]
-                },
-                {
-                  "id": "220",
-                  "stepType": "sendText",
-                  "text": "{{erp_services_reply}}",
-                  "buttons": []
                 }
               ],
               "quickReplies": []
@@ -103,10 +80,6 @@
   "customFields": {
     "900001": {
       "name": "erp_services_json",
-      "type": "longText"
-    },
-    "900002": {
-      "name": "erp_services_reply",
       "type": "longText"
     }
   },

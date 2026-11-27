@@ -1,13 +1,13 @@
 {
   "name": "check_availability",
-  "purpose": "Call when the guest wants free time slots to book. Call only when the service, branch, date and number of guests are all known from the conversation; otherwise ask only for the ones still missing. Call again with the new value whenever the guest changes any of them.",
+  "purpose": "Call to get free start times for a booking. Needs service_id (from get_services), branch_id (from get_branches), date as YYYY-MM-DD and number of guests. Ask the guest only for what is still missing. Call again whenever any of them changes.",
   "dataCollect": [
     {
-      "from": "service",
+      "from": "service_id",
       "to": "avail_service"
     },
     {
-      "from": "branch",
+      "from": "branch_id",
       "to": "avail_branch"
     },
     {
@@ -19,6 +19,6 @@
       "to": "avail_guests"
     }
   ],
-  "outputMessage": "",
+  "outputMessage": "Free start times (local time, JSON) for service_id={{avail_service}}, branch_id={{avail_branch}}, date={{avail_date}}, guests={{avail_guests}}: {{avail_slots_json}}\n- A list of times: group consecutive times into ranges (e.g. 9h–17h30), make clear they are start times, and ask which one suits the guest.\n- []: there are no free slots for that choice; suggest another day or branch.\n- ERP_UNAVAILABLE: you cannot check free times right now; offer staff. Never say there are no free slots in this case.",
   "_triggerFlowName": "check_availability — ERP slots"
 }

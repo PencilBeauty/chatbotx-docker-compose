@@ -1,0 +1,87 @@
+{
+  "formatVersion": 2,
+  "exportedAt": "2026-11-26T00:00:00.000Z",
+  "source": {
+    "workspaceId": "11797743065898183",
+    "flowId": "0"
+  },
+  "flows": [
+    {
+      "name": "get_branches — ERP branches",
+      "active": true,
+      "enableInInbox": false,
+      "startNodeId": "100",
+      "nodes": [
+        {
+          "id": "100",
+          "type": "sendMessage",
+          "position": {
+            "x": 100,
+            "y": 100
+          },
+          "measured": {
+            "width": 288,
+            "height": 100
+          },
+          "data": {
+            "name": "Load branches",
+            "isStartNode": true,
+            "details": {
+              "beforeStep": {
+                "id": "101",
+                "stepType": "chooseChannel",
+                "channel": "omnichannel"
+              },
+              "steps": [
+                {
+                  "id": "190",
+                  "stepType": "setCustomField",
+                  "inputFieldId": "900021",
+                  "operation": "O01",
+                  "value": "ERP_UNAVAILABLE"
+                },
+                {
+                  "id": "200",
+                  "stepType": "callApi",
+                  "method": "GET",
+                  "url": "https://salon-backend-1ui7.onrender.com/api/v1/public/branches",
+                  "headers": [
+                    {
+                      "key": "X-Tenant-ID",
+                      "value": "c573f47b-f4a3-42b6-91ce-e8b6534116fa"
+                    }
+                  ],
+                  "mapping": [
+                    {
+                      "jsonPath": "content",
+                      "outputFieldId": "900021"
+                    }
+                  ],
+                  "states": [
+                    {
+                      "id": "201",
+                      "stateType": "success"
+                    },
+                    {
+                      "id": "202",
+                      "stateType": "error"
+                    }
+                  ]
+                }
+              ],
+              "quickReplies": []
+            }
+          }
+        }
+      ],
+      "edges": []
+    }
+  ],
+  "customFields": {
+    "900021": {
+      "name": "erp_branches_json",
+      "type": "longText"
+    }
+  },
+  "botFields": {}
+}
