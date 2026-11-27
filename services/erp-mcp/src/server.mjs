@@ -42,11 +42,11 @@ async function runTool(name, args, handler) {
   const startedAt = Date.now()
   try {
     const output = await handler(args)
-    log("info", "tool_call", { tool: name, status: output.isError ? "error" : "ok", ms: Date.now() - startedAt })
+    log("info", "tool_call", { tool: name, args, status: output.isError ? "error" : "ok", ms: Date.now() - startedAt })
     return output
   } catch (error) {
     const status = error instanceof ErpUnavailableError ? "erp_unavailable" : "failed"
-    log("warn", "tool_call", { tool: name, status, ms: Date.now() - startedAt, error: error.message })
+    log("warn", "tool_call", { tool: name, args, status, ms: Date.now() - startedAt, error: error.message })
     return unavailable()
   }
 }
@@ -73,7 +73,7 @@ function buildServer() {
     "list_branches",
     {
       description:
-        "Salon branches taking bookings, with branch_id, address and opening hours. Call when the guest asks about branches, addresses, opening hours or the nearest branch, and to find the branch_id before check_free_slots. Guests often shorten branch names (street initials, missing accents).",
+        "Salon branches taking bookings, with branch_id (internal, never show it to the guest), address and opening hours. Call when the guest asks about branches, addresses, opening hours or the nearest branch, and to find the branch_id before check_free_slots. Guests often shorten branch names (street initials, missing accents).",
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -88,7 +88,7 @@ function buildServer() {
     "check_free_slots",
     {
       description:
-        "Free start times for one service at one branch on one date. Needs service_id (list_services), branch_id (list_branches), date as YYYY-MM-DD in salon local time, and the number of guests. Ask the guest only for what is missing; call again whenever any value changes. status: ok = offer the ranges (they are start times) and ask which suits the guest; no_slots = nothing free, suggest another day or branch; invalid = an id or the date was rejected, re-check them.",
+        "Free start times for one service at one branch on one date. Needs service_id (list_services), branch_id (list_branches), date as YYYY-MM-DD in salon local time, and the number of guests. Ask the guest only for what is missing; call again whenever any value changes. When replying, always state the date with its weekday (e.g. Sunday 29/11) so the guest can correct it, and never show service_id or branch_id. status: ok = offer the ranges (they are start times) and ask which suits the guest; no_slots = nothing free, suggest another day or branch; invalid = an id or the date was rejected, re-check them.",
       inputSchema: {
         service_id: z.number().int().positive(),
         branch_id: z.number().int().positive(),
