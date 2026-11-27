@@ -29,7 +29,7 @@ x-environment: &common-vars
   RUN_DB_SEED: true
   S3_ACCESS_KEY_ID: chatbotx
   S3_BUCKET: chatbotx
-  S3_ENPOINT: http://localhost:9000
+  S3_ENDPOINT: https://bot.pencilnails.com
   S3_REGION: us-west-2
   S3_SECRET_ACCESS_KEY: secretkey
   SCHEDULER_BUCKET_RANGE: 0-255
@@ -39,7 +39,7 @@ x-environment: &common-vars
 
 x-worker: &worker
   <<: [ *network, *depends-datastores ]
-  image: ghcr.io/chatbotxio/chatbotx-worker:latest
+  image: ghcr.io/pencilbeauty/chatbotx-worker:1.23.0-pencil.3
   platform: linux/amd64
   restart: unless-stopped
   extra_hosts:
@@ -54,7 +54,7 @@ x-rustfs-environment: &rustfs-environment
 services:
   postgres:
     <<: *network
-    image: timescale/timescaledb-ha:pg18.4-ts2.27.2-all
+    image: timescale/timescaledb-ha:pg18.4-ts2.27.2
     ports:
       - "5432:5432"
     volumes:
@@ -70,22 +70,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
-
-  adminer:
-    <<: *network
-    image: adminer:5.4.2
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      - "${ADMINER_PORT:-8080}:8080"
-
-  mailhog:
-    <<: *network
-    image: mailhog/mailhog:v1.0.1
-    ports:
-      - 1025:1025
-      - 8025:8025
 
   filesystem:
     <<: *network
@@ -143,7 +127,7 @@ services:
 
   builder:
     <<: [ *network, *depends-datastores ]
-    image: ghcr.io/chatbotxio/chatbotx-builder:latest
+    image: ghcr.io/chatbotxio/chatbotx-builder:1.23.0
     platform: linux/amd64
     restart: unless-stopped
     environment:
@@ -177,7 +161,7 @@ services:
   # Sandboxed runtime for user-authored JavaScript flow steps.
   # Isolated on an internal-only network with no host-published port.
   javascript-executor:
-    image: ghcr.io/chatbotxio/chatbotx-javascript-executor:latest
+    image: ghcr.io/chatbotxio/chatbotx-javascript-executor:1.23.0
     platform: linux/amd64
     restart: unless-stopped
     networks:
@@ -205,9 +189,19 @@ services:
       timeout: 10s
       retries: 3
 
+  erp-mcp:
+    <<: *network
+    build: ./services/erp-mcp
+    image: pencil/erp-mcp:1.0.0
+    restart: unless-stopped
+    environment:
+      MCP_TOKEN: ${ERP_MCP_TOKEN:?set ERP_MCP_TOKEN in .env}
+      ERP_BASE_URL: https://salon-backend-1ui7.onrender.com/api
+      ERP_TENANT_ID: c573f47b-f4a3-42b6-91ce-e8b6534116fa
+
   realtime:
     <<: [ *network ]
-    image: ghcr.io/chatbotxio/chatbotx-realtime:latest
+    image: ghcr.io/chatbotxio/chatbotx-realtime:1.23.0
     platform: linux/amd64
     restart: unless-stopped
     environment:

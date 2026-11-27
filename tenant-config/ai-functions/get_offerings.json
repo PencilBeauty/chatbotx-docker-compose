@@ -1,7 +1,0 @@
-{
-  "name": "get_offerings",
-  "purpose": "Call when the guest asks about prices: how much a service or item costs, the price list, or what is on the salon's menu with prices.",
-  "dataCollect": [],
-  "outputMessage": "",
-  "_triggerFlowName": "get_offerings — ERP offerings"
-}
