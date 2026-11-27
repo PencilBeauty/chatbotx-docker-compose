@@ -153,7 +153,7 @@
                   "text": "Customer message: {{last_input}}\nGuest values (may be empty or loosely worded): service={{avail_service}} | branch={{avail_branch}} | date={{avail_date}} | guests={{avail_guests}}\nCurrent time: {{current_user_time}}\nResolved request: {{avail_query}}\nBranches (JSON): {{avail_branches_json}}\nBookable services (JSON): {{avail_services_json}}\nFree start times from the salon system (JSON, local time): {{avail_slots_json}}\nWrite at most 4 short lines: the branch, the date as weekday and dd/mm, the number of guests and the service. Then the free start times as HH:mm, merging consecutive times 30 minutes apart into ranges (e.g. 9:00-11:30, 14:00-17:30). End by asking which time they want. If the list is empty, say clearly there are no free slots for that choice and suggest another date or branch. Never invent a time that is not in the list.",
                   "outputFieldId": "900015",
                   "temperature": 0.2,
-                  "maxOutputTokens": 800,
+                  "maxOutputTokens": 2048,
                   "states": [
                     {
                       "id": "2401",
@@ -209,7 +209,7 @@
                   "text": "Customer message: {{last_input}}\nGuest values (may be empty or loosely worded): service={{avail_service}} | branch={{avail_branch}} | date={{avail_date}} | guests={{avail_guests}}\nCurrent time: {{current_user_time}}\nResolved request: {{avail_query}}\nBranches (JSON): {{avail_branches_json}}\nBookable services (JSON): {{avail_services_json}}\nThe slot check did not complete. If the resolved request is AMBIGUOUS, list the bookable services that fit the customer's words and ask which one they want. If it is NOMATCH, say which detail could not be matched and list the valid choices for it (only ACTIVE branches). Otherwise say you can't check free slots right now and offer to connect them with staff. Never say there are no free slots and never invent a time.",
                   "outputFieldId": "900015",
                   "temperature": 0.2,
-                  "maxOutputTokens": 600,
+                  "maxOutputTokens": 2048,
                   "states": [
                     {
                       "id": "3101",
