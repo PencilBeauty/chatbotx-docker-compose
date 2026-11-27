@@ -5,7 +5,7 @@
   "temperature": 0.4,
   "maxOutputTokens": 2048,
   "_tools": [
-    "mcp:pencil_erp (list_services, list_branches, check_free_slots)",
+    "mcp:pencil_erp (list_services, list_branches, check_free_slots, prepare_booking, create_booking)",
     "system:Connect user to Human"
   ]
 }
