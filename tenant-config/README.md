@@ -26,3 +26,9 @@ Flow calls `GET /v1/public/services` (header `X-Tenant-ID`), maps `content` → 
 - `ai-agents/salon.json` `prompt` → agent **System Message**: general rules only (scope, facts-from-tools, style). Names no tools; tool choice comes from each function's Purpose.
 - Each flow's AI Generate Text step: `system` → UI **Prompt (optional)** = shared style block (identical in both flows); `text` → UI **User message** = question + ERP data + tool-specific instruction. This step writes the reply the customer actually sees.
 - Keep the style (reply in the customer's language, polite neutral address, no markdown) identical in the agent prompt and both flow `system` blocks.
+
+## check_availability (SCRUM-394)
+- Needs core-backend `GET /v1/public/bookings/availability/slots?branchId=&serviceId=&date=&guestCount=` -> `{"slots":[...]}` deployed first. The older `/bookings/availability` returns a root array, which Response Mapping (dot-prop) cannot store.
+- Import `flows/check_availability.chatbotx-flow.json`, **Publish**, create the AI Function from `ai-functions/check_availability.json` (Trigger Flow ID = imported flow), add it to the agent's Tools.
+- Flow: services + branches -> AI step resolves names and relative dates to `avail_query` (or `NOMATCH`) -> slots call -> AI reply. Slots call error (timeout, 4xx/5xx, `NOMATCH` -> 400) and resolver error go to the "Availability check failed" node, so an API failure is never reported as "no free slots". `{"slots":[]}` is always written, so an old result is never reused.
+- Missing values: the AI Function's Purpose makes the agent ask only for what is missing before calling; a changed value triggers a new call.
