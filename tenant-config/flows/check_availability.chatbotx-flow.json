@@ -101,7 +101,7 @@
                   "text": "Guest values (may be empty or loosely worded): service={{avail_service}} | branch={{avail_branch}} | date={{avail_date}} | guests={{avail_guests}}\nCurrent time: {{current_user_time}}\nBookable services (JSON): {{avail_services_json}}\nBranches (JSON): {{avail_branches_json}}\nMatch the service and branch by meaning against the lists. Resolve relative dates (today, tomorrow, a weekday) from the current time. guestCount defaults to 1 only if guests is empty.",
                   "outputFieldId": "900013",
                   "temperature": 0,
-                  "maxOutputTokens": 60,
+                  "maxOutputTokens": 250,
                   "states": [
                     {
                       "id": "2201",
