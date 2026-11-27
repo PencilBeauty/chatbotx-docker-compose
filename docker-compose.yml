@@ -39,7 +39,7 @@ x-environment: &common-vars
 
 x-worker: &worker
   <<: [ *network, *depends-datastores ]
-  image: ghcr.io/pencilbeauty/chatbotx-worker:1.23.0-pencil.1
+  image: ghcr.io/pencilbeauty/chatbotx-worker:1.23.0-pencil.2
   platform: linux/amd64
   restart: unless-stopped
   extra_hosts:
