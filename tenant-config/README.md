@@ -26,7 +26,7 @@ Flow calls `GET /v1/public/services` (header `X-Tenant-ID`), maps `content` → 
 Needs the patched worker image `ghcr.io/pencilbeauty/chatbotx-worker:1.23.0-pencil.1` (see `docker-compose.yml`, Confluence page 39420011). With it, an AI Function whose **Output message contains a `{{variable}}`** runs its Trigger Flow inline and returns the resolved Output message to the agent; nothing is sent to the guest by the flow. Upstream images ignore this and send the Output message as text.
 
 - Flows only fetch data: `setCustomField` writes `ERP_UNAVAILABLE` first, then one `callApi` maps the ERP payload into a custom field. A failed call leaves `ERP_UNAVAILABLE`, so an outage is never read as "no data". No AI step, no `sendText`.
-- The agent writes every reply. Voice and general rules live only in the agent prompt; it also gets `Current time: {{current_user_time}}` to resolve "mai", "thứ 7".
+- The agent writes every reply. Voice and general rules live only in the agent prompt; it also gets `Current time at the salon: {{current_time}}` to resolve "mai", "thứ 7". `current_time` uses the **workspace** timezone first, so set **Settings → General → Advanced → Timezone = Asia/Ho_Chi_Minh** (default `Etc/UTC` makes late-evening "mai" one day off). `current_user_time` would prefer the guest's timezone instead.
 - Each AI Function carries its own rules: **Purpose** = when to call; **Output message** = the data plus how to read it (empty list, `ERP_UNAVAILABLE`).
 - Booking lookup: agent calls `get_services` (service_id) and `get_branches` (branch_id), then `check_availability(service_id, branch_id, date YYYY-MM-DD, guests)` -> `GET /v1/public/bookings/availability/slots`.
 
