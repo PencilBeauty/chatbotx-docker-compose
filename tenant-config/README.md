@@ -25,7 +25,8 @@ Flow calls `GET /v1/public/services` (header `X-Tenant-ID`), maps `content` → 
 ## Prompts (where each one lives)
 - `ai-agents/salon.json` `prompt` → agent **System Message**: general rules only (scope, facts-from-tools, style). Names no tools; tool choice comes from each function's Purpose.
 - Each flow's AI Generate Text step: `system` → UI **Prompt (optional)** = shared style block (identical in both flows); `text` → UI **User message** = question + ERP data + tool-specific instruction. This step writes the reply the customer actually sees.
-- Keep the style (reply in the customer's language, polite neutral address, no markdown) identical in the agent prompt and both flow `system` blocks.
+- Voice: the guest-facing steps of `check_availability` use the front-desk-staff style block (natural address for the guest's language and culture, no raw system names, no markdown), and the agent `Style:` line carries the same wording. `get_services` / `get_offerings` still use the older neutral style block.
+- Agent prompt changes: copy `ai-agents/salon.json` `prompt` into the agent System Message (agents are not importable), so the file stays the source of truth.
 
 ## check_availability (SCRUM-394)
 - Needs core-backend `GET /v1/public/bookings/availability/slots?branchId=&serviceId=&date=&guestCount=` -> `{"slots":[...]}` deployed first. The older `/bookings/availability` returns a root array, which Response Mapping (dot-prop) cannot store.
