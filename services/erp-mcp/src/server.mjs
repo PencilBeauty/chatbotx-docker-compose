@@ -227,13 +227,13 @@ async function createBooking({ mobile }) {
 }
 
 function buildServer() {
-  const server = new McpServer({ name: "pencil-erp", version: "1.2.1" })
+  const server = new McpServer({ name: "pencil-erp", version: "1.3.0" })
 
   server.registerTool(
     "list_services",
     {
       description:
-        "Bookable salon services with service_id and duration in minutes. Call when the guest asks what services exist or how long one takes, and to find the service_id before check_free_slots. No prices here.",
+        "Bookable salon services with service_id and duration_min. No prices.",
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -248,7 +248,7 @@ function buildServer() {
     "list_branches",
     {
       description:
-        "Salon branches taking bookings, with branch_id (internal, never show it to the guest), address and opening hours. Call when the guest asks about branches, addresses, opening hours or the nearest branch, and to find the branch_id before check_free_slots. Guests often shorten branch names (street initials, missing accents).",
+        "Salon branches taking bookings, with branch_id, name, address, opening hours and phone. Guests often shorten branch names (street name only, missing accents).",
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -263,11 +263,11 @@ function buildServer() {
     "check_free_slots",
     {
       description:
-        "Free start times for one service at one branch on one date. Needs service_id (list_services), branch_id (list_branches), date as YYYY-MM-DD in salon local time, and the number of guests. Ask the guest only for what is missing; call again whenever any value changes. When replying, always state the date with its weekday (e.g. Sunday 29/11) so the guest can correct it, and never show service_id or branch_id. status: ok = offer the ranges (they are start times) and ask which suits the guest; no_slots = nothing free, suggest another day or branch; invalid = an id or the date was rejected, re-check them.",
+        "Free start times for one service at one branch on one date, as ranges of start times. status: ok = ranges has free start times; no_slots = nothing free that day; invalid = an id or the date was rejected, reason given.",
       inputSchema: {
         service_id: z.number().int().positive(),
         branch_id: z.number().int().positive(),
-        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("YYYY-MM-DD, salon local time"),
         guests: z.number().int().min(1).max(10),
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -298,17 +298,28 @@ function buildServer() {
   server.registerTool(
     "prepare_booking",
     {
-      description: `Step 1 of 2 to book. Checks the chosen start time is still free and returns a summary; it writes nothing. It checks free times itself, so check_free_slots is not needed first. Needs service_id, branch_id, date (YYYY-MM-DD, salon local time), time (HH:MM, one of the free start times), guests, and the guest's full name and mobile number. Optional note for the salon staff, only once the guest wants to book: a short summary, in the guest's language, of what the guest said anywhere in this chat that staff should know for this visit (nail condition, allergies, preferred staff or design, preferences, problems with a past visit); only what the guest actually said, never guesses. If the chat has nothing like that, ask once whether they want to add a note when you ask for name and phone; leave it empty if they say no. Ask only for what is missing. Before calling, ask the guest to agree that the salon uses their name and phone number to make and manage this booking, sharing the privacy policy link ${config.privacyPolicyUrl}; set privacy_consent to true only if the guest agreed in this chat, otherwise do not call and do not book. status: already_booked = this phone number already has a booking at an overlapping time, tell the guest its booking_code and details and do not book again; offer another time if they want a second booking; ready = send the guest every summary field (service, branch and address, weekday and date, time, number of guests, name, phone, and the note if any) and ask them to confirm; slot_taken = that time is no longer free, offer free_ranges; invalid_contact = ask again for the listed fields; invalid = re-check the ids. Call again whenever a detail changes; the latest summary is the one create_booking books. Never show ids.`,
+      description:
+        "Step 1 of 2 to book. Re-checks that the start time is free and holds a booking summary for create_booking; it writes nothing to the salon system. Calling it again for the same mobile replaces the held summary. status: ready = summary held, details in summary; already_booked = this mobile already has an active booking at an overlapping time, details in booking; slot_taken = the time is not free, free_ranges has free start times; invalid_contact = the fields listed in invalid are not acceptable (only Vietnamese mobile numbers); invalid = an id or the date was rejected, reason given.",
       inputSchema: {
         service_id: z.number().int().positive(),
         branch_id: z.number().int().positive(),
-        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-        time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("YYYY-MM-DD, salon local time"),
+        time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).describe("HH:MM start time"),
         guests: z.number().int().min(1).max(10),
         full_name: z.string().min(1).max(100),
         mobile: z.string().min(1).max(20),
-        note: z.string().max(300).optional(),
-        privacy_consent: z.literal(true),
+        note: z
+          .string()
+          .max(300)
+          .optional()
+          .describe(
+            "For salon staff: what the guest said in this chat that staff should know for this visit (nail condition, allergies, preferred staff or design, past problems), briefly, in the guest's language. Only what the guest said.",
+          ),
+        privacy_consent: z
+          .literal(true)
+          .describe(
+            `true only if the guest agreed in this chat that the salon uses their name and phone number to make and manage bookings, after being given the privacy policy link ${config.privacyPolicyUrl}`,
+          ),
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -319,10 +330,10 @@ function buildServer() {
     "create_booking",
     {
       description:
-        "Step 2 of 2: creates the booking in the salon system. Call only after you sent the prepare_booking summary and the guest's latest message clearly says yes to it. If the guest declines or wants changes, do not call; ask what to change or how else you can help. Pass the guest's mobile number; it books the latest prepare_booking summary for that number, so do not look anything up again first. Calling it again never creates a second booking. status: ok = the booking exists; tell the guest the booking_code, service, branch, weekday, date and time, and that it is booked; slot_taken = the time was just taken, nothing was booked, offer to check other times; rejected = nothing was booked, explain briefly and offer staff; expired = run prepare_booking again and re-confirm. Say the booking is made only when status is ok.",
+        "Step 2 of 2: creates in the salon system the booking held by the latest prepare_booking for this mobile. Repeat calls return the same booking and never create a second one. status: ok = booked, details in booking; slot_taken = the time was just taken, nothing booked; rejected = the salon system refused, nothing booked, reason given; expired = no summary held for this mobile (never prepared or older than 30 minutes).",
       inputSchema: {
         mobile: z.string().min(1).max(20),
-        guest_confirmed: z.literal(true),
+        guest_confirmed: z.literal(true).describe("true only if the guest's latest message clearly agreed to the latest summary"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
