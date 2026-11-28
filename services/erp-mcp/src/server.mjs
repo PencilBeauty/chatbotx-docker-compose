@@ -80,7 +80,7 @@ async function runTool(name, args, handler, fallbackText) {
   }
 }
 
-async function prepareBooking({ service_id, branch_id, date, time, guests, full_name, mobile }) {
+async function prepareBooking({ service_id, branch_id, date, time, guests, full_name, mobile, note }) {
   const name = normalizeName(full_name)
   const phone = normalizeMobile(mobile)
   if (!name || !phone) {
@@ -130,6 +130,7 @@ async function prepareBooking({ service_id, branch_id, date, time, guests, full_
     time,
     start_time,
     guests,
+    note: note?.trim() || undefined,
     full_name: name,
     mobile: phone,
     consent_at: new Date().toISOString(),
@@ -146,6 +147,7 @@ async function prepareBooking({ service_id, branch_id, date, time, guests, full_
       weekday,
       time,
       guests,
+      note: draft.note,
       full_name: name,
       mobile: phone,
     },
@@ -156,6 +158,10 @@ async function writeBooking(draft) {
   const request = erpBookingRequest(draft, { source: config.bookingSource, consentAt: draft.consent_at })
   try {
     const booking = await erp.createBooking(request, draft.key)
+    if (booking.status === "CANCELLED") {
+      log("warn", "booking_returned_cancelled", { booking_code: booking.booking_code })
+      return { status: "rejected", reason: "The salon system returned a cancelled booking; nothing new was booked." }
+    }
     return { status: "ok", booking: bookingReceipt(booking, draft) }
   } catch (error) {
     if (error instanceof ErpSlotTakenError) {
@@ -263,7 +269,7 @@ function buildServer() {
   server.registerTool(
     "prepare_booking",
     {
-      description: `Step 1 of 2 to book. Checks the chosen start time is still free and returns a summary; it writes nothing. It checks free times itself, so check_free_slots is not needed first. Needs service_id, branch_id, date (YYYY-MM-DD, salon local time), time (HH:MM, one of the free start times), guests, and the guest's full name and mobile number. Ask only for what is missing. Before calling, ask the guest to agree that Pencil uses their name and phone number to make and manage this booking, sharing the privacy policy link ${config.privacyPolicyUrl}; set privacy_consent to true only if the guest agreed in this chat, otherwise do not call and do not book. status: already_booked = this guest already has this exact booking, tell them its booking_code and do not book again; ready = send the guest every summary field (service, branch and address, weekday and date, time, number of guests, name, phone) and ask them to confirm; slot_taken = that time is no longer free, offer free_ranges; invalid_contact = ask again for the listed fields; invalid = re-check the ids. Call again whenever a detail changes; the latest summary is the one create_booking books. Never show ids.`,
+      description: `Step 1 of 2 to book. Checks the chosen start time is still free and returns a summary; it writes nothing. It checks free times itself, so check_free_slots is not needed first. Needs service_id, branch_id, date (YYYY-MM-DD, salon local time), time (HH:MM, one of the free start times), guests, and the guest's full name and mobile number. Optional note: the guest's own request for the salon (e.g. preferred staff, nail condition), in their words; when asking for name and phone, mention they can add a note; never invent one. Ask only for what is missing. Before calling, ask the guest to agree that Pencil uses their name and phone number to make and manage this booking, sharing the privacy policy link ${config.privacyPolicyUrl}; set privacy_consent to true only if the guest agreed in this chat, otherwise do not call and do not book. status: already_booked = this guest already has this exact booking, tell them its booking_code and do not book again; ready = send the guest every summary field (service, branch and address, weekday and date, time, number of guests, name, phone, and the note if any) and ask them to confirm; slot_taken = that time is no longer free, offer free_ranges; invalid_contact = ask again for the listed fields; invalid = re-check the ids. Call again whenever a detail changes; the latest summary is the one create_booking books. Never show ids.`,
       inputSchema: {
         service_id: z.number().int().positive(),
         branch_id: z.number().int().positive(),
@@ -272,6 +278,7 @@ function buildServer() {
         guests: z.number().int().min(1).max(10),
         full_name: z.string().min(1).max(100),
         mobile: z.string().min(1).max(20),
+        note: z.string().max(300).optional(),
         privacy_consent: z.literal(true),
       },
       annotations: { readOnlyHint: true, openWorldHint: false },

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 
 const MOBILE_PATTERN = /^0\d{9,10}$/
 
@@ -17,8 +17,8 @@ export function startTimeOf(date, time) {
   return `${date}T${time}:00`
 }
 
-export function bookingKey({ branch_id, service_id, start_time, guests, mobile }) {
-  const fingerprint = [branch_id, service_id, start_time, guests, mobile].join("|")
+export function bookingKey({ branch_id, service_id, start_time, guests, mobile, note }, draftId) {
+  const fingerprint = [draftId, branch_id, service_id, start_time, guests, mobile, note ?? ""].join("|")
   return createHash("sha256").update(fingerprint).digest("hex")
 }
 
@@ -30,7 +30,7 @@ export function erpBookingRequest(draft, { source, consentAt }) {
     start_time: draft.start_time,
     guest_count: draft.guests,
     source,
-    note: `Booked via Messenger chat. Personal data consent given at ${consentAt}.`,
+    note: [draft.note, `Booked via Messenger chat. Personal data consent given at ${consentAt}.`].filter(Boolean).join("\n"),
     items: Array.from({ length: draft.guests }, (_, index) => ({ service_id: draft.service_id, guest_no: index + 1 })),
   }
 }
@@ -56,6 +56,7 @@ export function bookingReceipt(booking, draft) {
     weekday: draft.weekday,
     time: draft.time,
     guests: draft.guests,
+    note: draft.note,
     full_name: booking.customer?.full_name ?? draft.full_name,
     mobile: booking.customer?.mobile ?? draft.mobile,
   }
@@ -83,7 +84,7 @@ export function createBookingDesk({ pendingTtlMs, resultTtlMs, now = Date.now })
   return {
     hold(draft) {
       sweep()
-      pending.set(draft.mobile, { draft: { ...draft, key: bookingKey(draft) }, expiresAt: now() + pendingTtlMs })
+      pending.set(draft.mobile, { draft: { ...draft, key: bookingKey(draft, randomUUID()) }, expiresAt: now() + pendingTtlMs })
     },
 
     draftOf(mobile) {
