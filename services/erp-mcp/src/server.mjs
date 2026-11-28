@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto"
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
 import { z } from "zod"
+import { createConsentLedger } from "./consent.mjs"
 import { createErpClient, ErpUnavailableError, ErpRejectedError, ErpSlotTakenError } from "./erp.mjs"
 import { toRanges, weekdayOf } from "./slots.mjs"
 import {
@@ -26,6 +27,7 @@ const config = {
   erpWriteTimeoutMs: Number(process.env.ERP_WRITE_TIMEOUT_MS ?? 20000),
   bookingSource: process.env.ERP_BOOKING_SOURCE ?? "messenger",
   privacyPolicyUrl: requiredEnv("PRIVACY_POLICY_URL"),
+  consentLogPath: process.env.CONSENT_LOG_PATH ?? "/data/consents.jsonl",
   pendingTtlMs: Number(process.env.BOOKING_PENDING_TTL_MS ?? 1800000),
   resultTtlMs: Number(process.env.BOOKING_RESULT_TTL_MS ?? 86400000),
   catalogCacheMs: Number(process.env.CATALOG_CACHE_MS ?? 300000),
@@ -35,6 +37,7 @@ const config = {
 const erp = createErpClient(config)
 
 const desk = createBookingDesk(config)
+const consents = createConsentLedger(config.consentLogPath)
 
 const ERP_UNAVAILABLE_TEXT =
   "erp_unavailable: the salon system could not be reached. Tell the guest you cannot check this right now and offer to connect them with staff. Never say there are no free slots."
@@ -158,7 +161,7 @@ async function prepareBooking({ service_id, branch_id, date, time, guests, full_
 }
 
 async function writeBooking(draft) {
-  const request = erpBookingRequest(draft, { source: config.bookingSource, consentAt: draft.consent_at })
+  const request = erpBookingRequest(draft, { source: config.bookingSource })
   try {
     const booking = await erp.createBooking(request, draft.key)
     if (booking.status === "CANCELLED") {
@@ -185,6 +188,22 @@ async function writeBooking(draft) {
   }
 }
 
+async function recordConsent(draft, booking_code) {
+  try {
+    await consents.record({
+      booking_code,
+      full_name: draft.full_name,
+      mobile: draft.mobile,
+      consent_at: draft.consent_at,
+      channel: config.bookingSource,
+      purpose: "make and manage this booking",
+      policy_url: config.privacyPolicyUrl,
+    })
+  } catch (error) {
+    log("error", "consent_record_failed", { booking_code, error: error.message })
+  }
+}
+
 async function createBooking({ mobile }) {
   const phone = normalizeMobile(mobile)
   const draft = phone && desk.draftOf(phone)
@@ -194,7 +213,13 @@ async function createBooking({ mobile }) {
       hint: "No prepared booking for this phone number. Call prepare_booking again with the details, show the summary and get a fresh confirmation.",
     })
   }
-  const outcome = await desk.once(draft, () => writeBooking(draft))
+  const outcome = await desk.once(draft, async () => {
+    const written = await writeBooking(draft)
+    if (written.status === "ok") {
+      await recordConsent(draft, written.booking.booking_code)
+    }
+    return written
+  })
   if (outcome.status === "erp_unavailable") {
     return unavailable(BOOKING_UNAVAILABLE_TEXT)
   }
@@ -202,7 +227,7 @@ async function createBooking({ mobile }) {
 }
 
 function buildServer() {
-  const server = new McpServer({ name: "pencil-erp", version: "1.1.1" })
+  const server = new McpServer({ name: "pencil-erp", version: "1.2.0" })
 
   server.registerTool(
     "list_services",
@@ -273,7 +298,7 @@ function buildServer() {
   server.registerTool(
     "prepare_booking",
     {
-      description: `Step 1 of 2 to book. Checks the chosen start time is still free and returns a summary; it writes nothing. It checks free times itself, so check_free_slots is not needed first. Needs service_id, branch_id, date (YYYY-MM-DD, salon local time), time (HH:MM, one of the free start times), guests, and the guest's full name and mobile number. Optional note: the guest's own request for the salon (e.g. preferred staff, nail condition), in their words; when asking for name and phone, mention they can add a note; never invent one. Ask only for what is missing. Before calling, ask the guest to agree that Pencil uses their name and phone number to make and manage this booking, sharing the privacy policy link ${config.privacyPolicyUrl}; set privacy_consent to true only if the guest agreed in this chat, otherwise do not call and do not book. status: already_booked = this phone number already has a booking at an overlapping time, tell the guest its booking_code and details and do not book again; offer another time if they want a second booking; ready = send the guest every summary field (service, branch and address, weekday and date, time, number of guests, name, phone, and the note if any) and ask them to confirm; slot_taken = that time is no longer free, offer free_ranges; invalid_contact = ask again for the listed fields; invalid = re-check the ids. Call again whenever a detail changes; the latest summary is the one create_booking books. Never show ids.`,
+      description: `Step 1 of 2 to book. Checks the chosen start time is still free and returns a summary; it writes nothing. It checks free times itself, so check_free_slots is not needed first. Needs service_id, branch_id, date (YYYY-MM-DD, salon local time), time (HH:MM, one of the free start times), guests, and the guest's full name and mobile number. Optional note for the salon staff: a short summary, in the guest's language, of what the guest said anywhere in this chat that staff should know for this visit (nail condition, allergies, preferred staff or design, preferences, problems with a past visit); only what the guest actually said, never guesses. If the chat has nothing like that, ask once whether they want to add a note when you ask for name and phone; leave it empty if they say no. Ask only for what is missing. Before calling, ask the guest to agree that Pencil uses their name and phone number to make and manage this booking, sharing the privacy policy link ${config.privacyPolicyUrl}; set privacy_consent to true only if the guest agreed in this chat, otherwise do not call and do not book. status: already_booked = this phone number already has a booking at an overlapping time, tell the guest its booking_code and details and do not book again; offer another time if they want a second booking; ready = send the guest every summary field (service, branch and address, weekday and date, time, number of guests, name, phone, and the note if any) and ask them to confirm; slot_taken = that time is no longer free, offer free_ranges; invalid_contact = ask again for the listed fields; invalid = re-check the ids. Call again whenever a detail changes; the latest summary is the one create_booking books. Never show ids.`,
       inputSchema: {
         service_id: z.number().int().positive(),
         branch_id: z.number().int().positive(),

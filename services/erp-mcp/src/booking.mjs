@@ -24,7 +24,7 @@ export function bookingKey({ branch_id, service_id, start_time, guests, mobile, 
   return createHash("sha256").update(fingerprint).digest("hex")
 }
 
-export function erpBookingRequest(draft, { source, consentAt }) {
+export function erpBookingRequest(draft, { source }) {
   return {
     branch_id: draft.branch_id,
     full_name: draft.full_name,
@@ -32,7 +32,7 @@ export function erpBookingRequest(draft, { source, consentAt }) {
     start_time: draft.start_time,
     guest_count: draft.guests,
     source,
-    note: [draft.note, `Booked via Messenger chat. Personal data consent given at ${consentAt}.`].filter(Boolean).join("\n"),
+    note: draft.note,
     items: Array.from({ length: draft.guests }, (_, index) => ({ service_id: draft.service_id, guest_no: index + 1 })),
   }
 }
