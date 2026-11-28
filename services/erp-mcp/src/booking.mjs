@@ -83,15 +83,12 @@ export function createBookingDesk({ pendingTtlMs, resultTtlMs, now = Date.now })
   return {
     hold(draft) {
       sweep()
-      const key = bookingKey(draft)
-      const code = key.slice(0, 8).toUpperCase()
-      pending.set(code, { draft: { ...draft, key }, expiresAt: now() + pendingTtlMs })
-      return code
+      pending.set(draft.mobile, { draft: { ...draft, key: bookingKey(draft) }, expiresAt: now() + pendingTtlMs })
     },
 
-    draftOf(code) {
+    draftOf(mobile) {
       sweep()
-      return pending.get(String(code).trim().toUpperCase())?.draft
+      return pending.get(mobile)?.draft
     },
 
     async once(draft, create) {

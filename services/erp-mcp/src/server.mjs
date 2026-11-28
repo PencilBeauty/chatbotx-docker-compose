@@ -39,7 +39,7 @@ const ERP_UNAVAILABLE_TEXT =
   "erp_unavailable: the salon system could not be reached. Tell the guest you cannot check this right now and offer to connect them with staff. Never say there are no free slots."
 
 const BOOKING_UNAVAILABLE_TEXT =
-  "erp_unavailable: the booking is NOT confirmed. The salon system did not answer, so do not say the booking is made. Tell the guest you could not confirm it right now; offer to try again in a moment (same confirmation_code, it never creates a duplicate) or to connect them with staff."
+  "erp_unavailable: the booking is NOT confirmed. The salon system did not answer, so do not say the booking is made. Tell the guest you could not confirm it right now; offer to try again in a moment (calling create_booking again never creates a duplicate) or to connect them with staff."
 
 const PERSONAL_FIELDS = new Set(["full_name", "mobile"])
 
@@ -134,10 +134,9 @@ async function prepareBooking({ service_id, branch_id, date, time, guests, full_
     mobile: phone,
     consent_at: new Date().toISOString(),
   }
-  const confirmation_code = desk.hold(draft)
+  desk.hold(draft)
   return result({
     status: "ready",
-    confirmation_code,
     summary: {
       service: service.name,
       duration_min: service.duration_min,
@@ -176,12 +175,13 @@ async function writeBooking(draft) {
   }
 }
 
-async function createBooking({ confirmation_code }) {
-  const draft = desk.draftOf(confirmation_code)
+async function createBooking({ mobile }) {
+  const phone = normalizeMobile(mobile)
+  const draft = phone && desk.draftOf(phone)
   if (!draft) {
     return result({
       status: "expired",
-      hint: "No pending booking for this code. Call prepare_booking again with the details, show the summary and get a fresh confirmation.",
+      hint: "No prepared booking for this phone number. Call prepare_booking again with the details, show the summary and get a fresh confirmation.",
     })
   }
   const outcome = await desk.once(draft, () => writeBooking(draft))
@@ -263,7 +263,7 @@ function buildServer() {
   server.registerTool(
     "prepare_booking",
     {
-      description: `Step 1 of 2 to book. Checks the chosen start time is still free and returns a summary plus a confirmation_code; it writes nothing. Needs service_id, branch_id, date (YYYY-MM-DD, salon local time), time (HH:MM, one of the free start times), guests, and the guest's full name and mobile number. Ask only for what is missing. Before calling, ask the guest to agree that Pencil uses their name and phone number to make and manage this booking, sharing the privacy policy link ${config.privacyPolicyUrl}; set privacy_consent to true only if the guest agreed in this chat, otherwise do not call and do not book. status: already_booked = this guest already has this exact booking, tell them its booking_code and do not book again; ready = send the guest the whole summary (service, branch and address, weekday and date, time, guests, name, phone) and ask them to confirm; slot_taken = that time is no longer free, offer free_ranges; invalid_contact = ask again for the listed fields; invalid = re-check the ids. Call again whenever a detail changes; never show ids or the confirmation_code.`,
+      description: `Step 1 of 2 to book. Checks the chosen start time is still free and returns a summary; it writes nothing. It checks free times itself, so check_free_slots is not needed first. Needs service_id, branch_id, date (YYYY-MM-DD, salon local time), time (HH:MM, one of the free start times), guests, and the guest's full name and mobile number. Ask only for what is missing. Before calling, ask the guest to agree that Pencil uses their name and phone number to make and manage this booking, sharing the privacy policy link ${config.privacyPolicyUrl}; set privacy_consent to true only if the guest agreed in this chat, otherwise do not call and do not book. status: already_booked = this guest already has this exact booking, tell them its booking_code and do not book again; ready = send the guest every summary field (service, branch and address, weekday and date, time, number of guests, name, phone) and ask them to confirm; slot_taken = that time is no longer free, offer free_ranges; invalid_contact = ask again for the listed fields; invalid = re-check the ids. Call again whenever a detail changes; the latest summary is the one create_booking books. Never show ids.`,
       inputSchema: {
         service_id: z.number().int().positive(),
         branch_id: z.number().int().positive(),
@@ -283,9 +283,9 @@ function buildServer() {
     "create_booking",
     {
       description:
-        "Step 2 of 2: creates the booking in the salon system. Call only after you sent the prepare_booking summary and the guest's latest message clearly says yes to it. If the guest declines or wants changes, do not call; ask what to change or how else you can help. Pass the confirmation_code from prepare_booking. Calling again with the same code never creates a second booking. status: ok = the booking exists; tell the guest the booking_code, service, branch, weekday, date and time, and that it is booked; slot_taken = the time was just taken, nothing was booked, offer to check other times; rejected = nothing was booked, explain briefly and offer staff; expired = run prepare_booking again and re-confirm. Say the booking is made only when status is ok.",
+        "Step 2 of 2: creates the booking in the salon system. Call only after you sent the prepare_booking summary and the guest's latest message clearly says yes to it. If the guest declines or wants changes, do not call; ask what to change or how else you can help. Pass the guest's mobile number; it books the latest prepare_booking summary for that number, so do not look anything up again first. Calling it again never creates a second booking. status: ok = the booking exists; tell the guest the booking_code, service, branch, weekday, date and time, and that it is booked; slot_taken = the time was just taken, nothing was booked, offer to check other times; rejected = nothing was booked, explain briefly and offer staff; expired = run prepare_booking again and re-confirm. Say the booking is made only when status is ok.",
       inputSchema: {
-        confirmation_code: z.string().min(4).max(16),
+        mobile: z.string().min(1).max(20),
         guest_confirmed: z.literal(true),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
