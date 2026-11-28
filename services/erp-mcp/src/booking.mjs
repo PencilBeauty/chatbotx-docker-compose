@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto"
+import { randomUUID } from "node:crypto"
 import { parsePhoneNumberFromString } from "libphonenumber-js/max"
 import { weekdayOf } from "./slots.mjs"
 
@@ -17,11 +17,6 @@ export function normalizeName(raw) {
 
 export function startTimeOf(date, time) {
   return `${date}T${time}:00`
-}
-
-export function bookingKey({ branch_id, service_id, start_time, guests, mobile, note }, draftId) {
-  const fingerprint = [draftId, branch_id, service_id, start_time, guests, mobile, note ?? ""].join("|")
-  return createHash("sha256").update(fingerprint).digest("hex")
 }
 
 export function erpBookingRequest(draft, { source }) {
@@ -97,7 +92,7 @@ export function createBookingDesk({ pendingTtlMs, resultTtlMs, now = Date.now })
   return {
     hold(draft) {
       sweep()
-      pending.set(draft.mobile, { draft: { ...draft, key: bookingKey(draft, randomUUID()) }, expiresAt: now() + pendingTtlMs })
+      pending.set(draft.mobile, { draft: { ...draft, key: randomUUID() }, expiresAt: now() + pendingTtlMs })
     },
 
     draftOf(mobile) {

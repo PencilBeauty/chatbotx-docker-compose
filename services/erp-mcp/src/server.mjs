@@ -4,18 +4,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
 import { z } from "zod"
 import { createConsentLedger } from "./consent.mjs"
-import { createErpClient, ErpUnavailableError, ErpRejectedError, ErpSlotTakenError } from "./erp.mjs"
+import { createErpClient, ErpRejectedError, ErpUnavailableError } from "./erp.mjs"
 import { toRanges, weekdayOf } from "./slots.mjs"
-import {
-  bookingReceipt,
-  createBookingDesk,
-  erpBookingRequest,
-  normalizeMobile,
-  normalizeName,
-  draftInterval,
-  overlapsBooking,
-  startTimeOf,
-} from "./booking.mjs"
+import { createBookingDesk } from "./booking.mjs"
+import { createBookingService } from "./booking-service.mjs"
 import { log } from "./log.mjs"
 
 const config = {
@@ -36,14 +28,23 @@ const config = {
 
 const erp = createErpClient(config)
 
-const desk = createBookingDesk(config)
-const consents = createConsentLedger(config.consentLogPath)
+const booking = createBookingService({
+  erp,
+  desk: createBookingDesk(config),
+  consents: createConsentLedger(config.consentLogPath),
+  bookingSource: config.bookingSource,
+  privacyPolicyUrl: config.privacyPolicyUrl,
+})
 
-const ERP_UNAVAILABLE_TEXT =
-  "erp_unavailable: the salon system could not be reached. Tell the guest you cannot check this right now and offer to connect them with staff. Never say there are no free slots."
+const ERP_UNAVAILABLE = {
+  status: "erp_unavailable",
+  detail: "The salon system did not answer, so nothing is known about services, free times or bookings.",
+}
 
-const BOOKING_UNAVAILABLE_TEXT =
-  "erp_unavailable: the booking is NOT confirmed. The salon system did not answer, so do not say the booking is made. Tell the guest you could not confirm it right now; offer to try again in a moment (calling create_booking again never creates a duplicate) or to connect them with staff."
+const BOOKING_UNAVAILABLE = {
+  status: "erp_unavailable",
+  detail: "The salon system did not answer, so the booking is not confirmed. Calling create_booking again never creates a second booking.",
+}
 
 const PERSONAL_FIELDS = new Set(["full_name", "mobile"])
 
@@ -56,11 +57,7 @@ function requiredEnv(name) {
 }
 
 function result(payload) {
-  return { content: [{ type: "text", text: JSON.stringify(payload) }] }
-}
-
-function unavailable(text = ERP_UNAVAILABLE_TEXT) {
-  return { content: [{ type: "text", text }], isError: true }
+  return { content: [{ type: "text", text: JSON.stringify(payload) }], isError: payload.status === "erp_unavailable" }
 }
 
 function redacted(args) {
@@ -69,165 +66,22 @@ function redacted(args) {
   )
 }
 
-async function runTool(name, args, handler, fallbackText) {
+async function runTool(name, args, handler, unavailable = ERP_UNAVAILABLE) {
   const startedAt = Date.now()
   const logged = redacted(args)
   try {
-    const output = await handler(args)
-    const status = output.isError ? "error" : JSON.parse(output.content[0].text).status
-    log("info", "tool_call", { tool: name, args: logged, status, ms: Date.now() - startedAt })
-    return output
+    const payload = await handler(args)
+    log("info", "tool_call", { tool: name, args: logged, status: payload.status, ms: Date.now() - startedAt })
+    return result(payload.status === "erp_unavailable" ? unavailable : payload)
   } catch (error) {
     const status = error instanceof ErpUnavailableError ? "erp_unavailable" : "failed"
     log("warn", "tool_call", { tool: name, args: logged, status, ms: Date.now() - startedAt, error: error.message })
-    return unavailable(fallbackText)
+    return result(unavailable)
   }
-}
-
-async function prepareBooking({ service_id, branch_id, date, time, guests, full_name, mobile, note }) {
-  const name = normalizeName(full_name)
-  const phone = normalizeMobile(mobile)
-  if (!name || !phone) {
-    return result({
-      status: "invalid_contact",
-      invalid: [...(name ? [] : ["full_name"]), ...(phone ? [] : ["mobile"])],
-      hint: "Ask the guest again for the invalid value. Only Vietnamese mobile numbers can be booked.",
-    })
-  }
-  const [services, branches] = await Promise.all([erp.activeServices(), erp.activeBranches()])
-  const service = services.find((candidate) => candidate.service_id === service_id)
-  const branch = branches.find((candidate) => candidate.branch_id === branch_id)
-  if (!service || !branch) {
-    return result({ status: "invalid", reason: `${service ? "branch_id" : "service_id"} is not bookable; re-check with list_services / list_branches` })
-  }
-  let slots
-  try {
-    slots = await erp.freeSlots({ serviceId: service_id, branchId: branch_id, date, guests })
-  } catch (error) {
-    if (error instanceof ErpRejectedError) {
-      return result({ status: "invalid", reason: error.message })
-    }
-    throw error
-  }
-  const weekday = weekdayOf(date)
-  const start_time = startTimeOf(date, time)
-  const existing = await erp.bookingsByMobile(phone)
-  const wanted = draftInterval({ start_time, duration_min: service.duration_min })
-  const booked = existing.find((booking) => overlapsBooking(booking, wanted))
-  if (booked) {
-    return result({
-      status: "already_booked",
-      booking: bookingReceipt(booked),
-    })
-  }
-  if (!slots.some((slot) => slot.slice(11, 16) === time)) {
-    return result({ status: "slot_taken", date, weekday, time, free_ranges: toRanges(slots) })
-  }
-  const draft = {
-    service_id,
-    service_name: service.name,
-    duration_min: service.duration_min,
-    branch_id,
-    branch_name: branch.name,
-    branch_address: branch.address,
-    date,
-    weekday,
-    time,
-    start_time,
-    guests,
-    note: note?.trim() || undefined,
-    full_name: name,
-    mobile: phone,
-    consent_at: new Date().toISOString(),
-    known_booking_codes: existing.map((booking) => booking.booking_code),
-  }
-  desk.hold(draft)
-  return result({
-    status: "ready",
-    summary: {
-      service: service.name,
-      duration_min: service.duration_min,
-      branch: branch.name,
-      address: branch.address,
-      date,
-      weekday,
-      time,
-      guests,
-      note: draft.note,
-      full_name: name,
-      mobile: phone,
-    },
-  })
-}
-
-async function writeBooking(draft) {
-  const request = erpBookingRequest(draft, { source: config.bookingSource })
-  try {
-    const booking = await erp.createBooking(request, draft.key)
-    if (booking.status === "CANCELLED") {
-      log("warn", "booking_returned_cancelled", { booking_code: booking.booking_code })
-      return { status: "rejected", reason: "The salon system returned a cancelled booking; nothing new was booked." }
-    }
-    return { status: "ok", booking: bookingReceipt(booking, draft) }
-  } catch (error) {
-    if (error instanceof ErpSlotTakenError) {
-      return { status: "slot_taken", reason: error.message }
-    }
-    if (error instanceof ErpRejectedError) {
-      return { status: "rejected", reason: error.message }
-    }
-    const existing = await erp.bookingsByMobile(draft.mobile).catch(() => [])
-    const wanted = draftInterval(draft)
-    const match = existing.find((booking) => overlapsBooking(booking, wanted) && !draft.known_booking_codes.includes(booking.booking_code))
-    if (match) {
-      log("info", "booking_reconciled", { booking_code: match.booking_code })
-      return { status: "ok", booking: bookingReceipt(match, draft) }
-    }
-    log("warn", "booking_unconfirmed", { error: error.message })
-    return { status: "erp_unavailable" }
-  }
-}
-
-async function recordConsent(draft, booking_code) {
-  try {
-    await consents.record({
-      booking_code,
-      full_name: draft.full_name,
-      mobile: draft.mobile,
-      consent_at: draft.consent_at,
-      channel: config.bookingSource,
-      purpose: "make and manage this booking",
-      policy_url: config.privacyPolicyUrl,
-    })
-  } catch (error) {
-    log("error", "consent_record_failed", { booking_code, error: error.message })
-  }
-}
-
-async function createBooking({ mobile }) {
-  const phone = normalizeMobile(mobile)
-  const draft = phone && desk.draftOf(phone)
-  if (!draft) {
-    return result({
-      status: "expired",
-      hint: "No prepared booking for this phone number. Call prepare_booking again with the details, show the summary and get a fresh confirmation.",
-    })
-  }
-  const outcome = await desk.once(draft, async () => {
-    const written = await writeBooking(draft)
-    if (written.status === "ok") {
-      await recordConsent(draft, written.booking.booking_code)
-    }
-    return written
-  })
-  if (outcome.status === "erp_unavailable") {
-    return unavailable(BOOKING_UNAVAILABLE_TEXT)
-  }
-  return result(outcome)
 }
 
 function buildServer() {
-  const server = new McpServer({ name: "pencil-erp", version: "1.3.0" })
+  const server = new McpServer({ name: "pencil-erp", version: "1.3.1" })
 
   server.registerTool(
     "list_services",
@@ -240,7 +94,7 @@ function buildServer() {
     (args) =>
       runTool("list_services", args, async () => {
         const services = await erp.activeServices()
-        return result({ status: "ok", services })
+        return { status: "ok", services }
       }),
   )
 
@@ -255,7 +109,7 @@ function buildServer() {
     (args) =>
       runTool("list_branches", args, async () => {
         const branches = await erp.activeBranches()
-        return result({ status: "ok", branches })
+        return { status: "ok", branches }
       }),
   )
 
@@ -277,7 +131,7 @@ function buildServer() {
         try {
           const slots = await erp.freeSlots({ serviceId: service_id, branchId: branch_id, date, guests })
           const ranges = toRanges(slots)
-          return result({
+          return {
             status: ranges.length > 0 ? "ok" : "no_slots",
             service_id,
             branch_id,
@@ -285,10 +139,10 @@ function buildServer() {
             weekday: weekdayOf(date),
             guests,
             ranges,
-          })
+          }
         } catch (error) {
           if (error instanceof ErpRejectedError) {
-            return result({ status: "invalid", reason: error.message })
+            return { status: "invalid", reason: error.message }
           }
           throw error
         }
@@ -323,7 +177,7 @@ function buildServer() {
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    (args) => runTool("prepare_booking", args, prepareBooking),
+    (args) => runTool("prepare_booking", args, booking.prepare),
   )
 
   server.registerTool(
@@ -337,7 +191,7 @@ function buildServer() {
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    (args) => runTool("create_booking", args, createBooking, BOOKING_UNAVAILABLE_TEXT),
+    (args) => runTool("create_booking", args, booking.create, BOOKING_UNAVAILABLE),
   )
 
   return server
