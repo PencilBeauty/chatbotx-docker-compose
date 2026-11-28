@@ -2,35 +2,60 @@ export class ErpUnavailableError extends Error {}
 
 export class ErpRejectedError extends Error {}
 
+export class ErpSlotTakenError extends Error {}
+
 const RETRYABLE_STATUS = new Set([502, 503, 504])
 
-export function createErpClient({ erpBaseUrl, erpTenantId, erpTimeoutMs, catalogCacheMs }) {
+const REJECTED_STATUS = new Set([400, 404, 409])
+
+async function errorDetail(response) {
+  const body = await response.json().catch(() => ({}))
+  return body.message ?? body.error ?? `status ${response.status}`
+}
+
+export function createErpClient({ erpBaseUrl, erpTenantId, erpTimeoutMs, erpWriteTimeoutMs, catalogCacheMs }) {
   const baseUrl = erpBaseUrl.replace(/\/+$/, "")
   const cache = new Map()
+
+  async function send(path, { method = "GET", body, headers = {}, timeoutMs = erpTimeoutMs } = {}) {
+    const response = await fetch(`${baseUrl}${path}`, {
+      method,
+      headers: {
+        "X-Tenant-ID": erpTenantId,
+        Accept: "application/json",
+        ...(body ? { "Content-Type": "application/json" } : {}),
+        ...headers,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (response.ok) {
+      return await response.json()
+    }
+    if (REJECTED_STATUS.has(response.status)) {
+      throw new ErpRejectedError(`ERP rejected the request (${response.status}): ${await errorDetail(response)}`)
+    }
+    if (response.status === 422) {
+      throw new ErpSlotTakenError(`ERP refused the time (${response.status}): ${await errorDetail(response)}`)
+    }
+    const error = new ErpUnavailableError(`ERP status ${response.status}`)
+    error.retryable = RETRYABLE_STATUS.has(response.status)
+    throw error
+  }
 
   async function request(path) {
     let lastError
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const response = await fetch(`${baseUrl}${path}`, {
-          headers: { "X-Tenant-ID": erpTenantId, Accept: "application/json" },
-          signal: AbortSignal.timeout(erpTimeoutMs),
-        })
-        if (response.ok) {
-          return await response.json()
-        }
-        if (response.status === 400 || response.status === 404) {
-          throw new ErpRejectedError(`ERP rejected the request (${response.status})`)
-        }
-        lastError = new ErpUnavailableError(`ERP status ${response.status}`)
-        if (!RETRYABLE_STATUS.has(response.status)) {
-          break
-        }
+        return await send(path)
       } catch (error) {
-        if (error instanceof ErpRejectedError) {
+        if (error instanceof ErpRejectedError || error instanceof ErpSlotTakenError) {
           throw error
         }
-        lastError = new ErpUnavailableError(error.message)
+        lastError = error instanceof ErpUnavailableError ? error : new ErpUnavailableError(error.message)
+        if (lastError.retryable === false) {
+          break
+        }
       }
     }
     throw lastError
@@ -84,6 +109,27 @@ export function createErpClient({ erpBaseUrl, erpTenantId, erpTimeoutMs, catalog
       })
       const body = await request(`/v1/public/bookings/availability/slots?${query}`)
       return body.slots ?? []
+    },
+
+    createBooking: async (booking, idempotencyKey) => {
+      try {
+        return await send("/v1/public/bookings", {
+          method: "POST",
+          body: booking,
+          headers: { "X-Idempotency-Key": idempotencyKey },
+          timeoutMs: erpWriteTimeoutMs,
+        })
+      } catch (error) {
+        if (error instanceof ErpRejectedError || error instanceof ErpSlotTakenError || error instanceof ErpUnavailableError) {
+          throw error
+        }
+        throw new ErpUnavailableError(error.message)
+      }
+    },
+
+    bookingsByMobile: async (mobile) => {
+      const page = await request(`/v1/public/bookings?${new URLSearchParams({ mobile, size: "20" })}`)
+      return page.content ?? []
     },
   }
 }

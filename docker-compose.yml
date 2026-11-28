@@ -192,12 +192,15 @@ services:
   erp-mcp:
     <<: *network
     build: ./services/erp-mcp
-    image: pencil/erp-mcp:1.0.0
+    image: pencil/erp-mcp:1.2.0
     restart: unless-stopped
     environment:
       MCP_TOKEN: ${ERP_MCP_TOKEN:?set ERP_MCP_TOKEN in .env}
       ERP_BASE_URL: https://salon-backend-1ui7.onrender.com/api
       ERP_TENANT_ID: c573f47b-f4a3-42b6-91ce-e8b6534116fa
+      PRIVACY_POLICY_URL: https://pencilnails.com/privacy-policy
+    volumes:
+      - erp-mcp-data:/data
 
   realtime:
     <<: [ *network ]
@@ -219,6 +222,7 @@ networks:
     internal: true
 
 volumes:
+  erp-mcp-data:
   db-data:
   redis-data:
   filesystem-data:
