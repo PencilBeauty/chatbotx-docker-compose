@@ -11,7 +11,8 @@ import {
   erpBookingRequest,
   normalizeMobile,
   normalizeName,
-  sameBooking,
+  draftInterval,
+  overlapsBooking,
   startTimeOf,
 } from "./booking.mjs"
 import { log } from "./log.mjs"
@@ -87,7 +88,7 @@ async function prepareBooking({ service_id, branch_id, date, time, guests, full_
     return result({
       status: "invalid_contact",
       invalid: [...(name ? [] : ["full_name"]), ...(phone ? [] : ["mobile"])],
-      hint: "Ask the guest again for the invalid value. A Vietnamese mobile has 10 digits and starts with 0.",
+      hint: "Ask the guest again for the invalid value. Only Vietnamese mobile numbers can be booked.",
     })
   }
   const [services, branches] = await Promise.all([erp.activeServices(), erp.activeBranches()])
@@ -108,11 +109,12 @@ async function prepareBooking({ service_id, branch_id, date, time, guests, full_
   const weekday = weekdayOf(date)
   const start_time = startTimeOf(date, time)
   const existing = await erp.bookingsByMobile(phone)
-  const booked = existing.find((booking) => sameBooking(booking, { start_time, service_id, branch_name: branch.name }))
+  const wanted = draftInterval({ start_time, duration_min: service.duration_min })
+  const booked = existing.find((booking) => overlapsBooking(booking, wanted))
   if (booked) {
     return result({
       status: "already_booked",
-      booking: bookingReceipt(booked, { service_name: service.name, date, weekday, time, guests, full_name: name, mobile: phone }),
+      booking: bookingReceipt(booked),
     })
   }
   if (!slots.some((slot) => slot.slice(11, 16) === time)) {
@@ -134,6 +136,7 @@ async function prepareBooking({ service_id, branch_id, date, time, guests, full_
     full_name: name,
     mobile: phone,
     consent_at: new Date().toISOString(),
+    known_booking_codes: existing.map((booking) => booking.booking_code),
   }
   desk.hold(draft)
   return result({
@@ -171,7 +174,8 @@ async function writeBooking(draft) {
       return { status: "rejected", reason: error.message }
     }
     const existing = await erp.bookingsByMobile(draft.mobile).catch(() => [])
-    const match = existing.find((booking) => sameBooking(booking, draft))
+    const wanted = draftInterval(draft)
+    const match = existing.find((booking) => overlapsBooking(booking, wanted) && !draft.known_booking_codes.includes(booking.booking_code))
     if (match) {
       log("info", "booking_reconciled", { booking_code: match.booking_code })
       return { status: "ok", booking: bookingReceipt(match, draft) }
@@ -198,7 +202,7 @@ async function createBooking({ mobile }) {
 }
 
 function buildServer() {
-  const server = new McpServer({ name: "pencil-erp", version: "1.1.0" })
+  const server = new McpServer({ name: "pencil-erp", version: "1.1.1" })
 
   server.registerTool(
     "list_services",
@@ -269,7 +273,7 @@ function buildServer() {
   server.registerTool(
     "prepare_booking",
     {
-      description: `Step 1 of 2 to book. Checks the chosen start time is still free and returns a summary; it writes nothing. It checks free times itself, so check_free_slots is not needed first. Needs service_id, branch_id, date (YYYY-MM-DD, salon local time), time (HH:MM, one of the free start times), guests, and the guest's full name and mobile number. Optional note: the guest's own request for the salon (e.g. preferred staff, nail condition), in their words; when asking for name and phone, mention they can add a note; never invent one. Ask only for what is missing. Before calling, ask the guest to agree that Pencil uses their name and phone number to make and manage this booking, sharing the privacy policy link ${config.privacyPolicyUrl}; set privacy_consent to true only if the guest agreed in this chat, otherwise do not call and do not book. status: already_booked = this guest already has this exact booking, tell them its booking_code and do not book again; ready = send the guest every summary field (service, branch and address, weekday and date, time, number of guests, name, phone, and the note if any) and ask them to confirm; slot_taken = that time is no longer free, offer free_ranges; invalid_contact = ask again for the listed fields; invalid = re-check the ids. Call again whenever a detail changes; the latest summary is the one create_booking books. Never show ids.`,
+      description: `Step 1 of 2 to book. Checks the chosen start time is still free and returns a summary; it writes nothing. It checks free times itself, so check_free_slots is not needed first. Needs service_id, branch_id, date (YYYY-MM-DD, salon local time), time (HH:MM, one of the free start times), guests, and the guest's full name and mobile number. Optional note: the guest's own request for the salon (e.g. preferred staff, nail condition), in their words; when asking for name and phone, mention they can add a note; never invent one. Ask only for what is missing. Before calling, ask the guest to agree that Pencil uses their name and phone number to make and manage this booking, sharing the privacy policy link ${config.privacyPolicyUrl}; set privacy_consent to true only if the guest agreed in this chat, otherwise do not call and do not book. status: already_booked = this phone number already has a booking at an overlapping time, tell the guest its booking_code and details and do not book again; offer another time if they want a second booking; ready = send the guest every summary field (service, branch and address, weekday and date, time, number of guests, name, phone, and the note if any) and ask them to confirm; slot_taken = that time is no longer free, offer free_ranges; invalid_contact = ask again for the listed fields; invalid = re-check the ids. Call again whenever a detail changes; the latest summary is the one create_booking books. Never show ids.`,
       inputSchema: {
         service_id: z.number().int().positive(),
         branch_id: z.number().int().positive(),

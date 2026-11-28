@@ -1,11 +1,13 @@
 import { createHash, randomUUID } from "node:crypto"
+import { parsePhoneNumberFromString } from "libphonenumber-js/max"
+import { weekdayOf } from "./slots.mjs"
 
-const MOBILE_PATTERN = /^0\d{9,10}$/
+const ERP_PHONE_COUNTRY = "VN"
 
 export function normalizeMobile(raw) {
-  const digits = String(raw).replace(/[\s.\-()]/g, "")
-  const local = digits.replace(/^\+?84(?=\d{9}$)/, "0")
-  return MOBILE_PATTERN.test(local) ? local : undefined
+  const phone = parsePhoneNumberFromString(String(raw), ERP_PHONE_COUNTRY)
+  const bookable = phone?.isValid() && phone.country === ERP_PHONE_COUNTRY && phone.getType() === "MOBILE"
+  return bookable ? `0${phone.nationalNumber}` : undefined
 }
 
 export function normalizeName(raw) {
@@ -35,30 +37,41 @@ export function erpBookingRequest(draft, { source, consentAt }) {
   }
 }
 
-export function sameBooking(existing, draft) {
-  const items = existing.booking_items ?? []
-  return (
-    existing.status !== "CANCELLED" &&
-    existing.start_time?.slice(0, 16) === draft.start_time.slice(0, 16) &&
-    existing.branch?.branch_name === draft.branch_name &&
-    items.some((item) => item.service_id === draft.service_id)
-  )
+const MINUTE_MS = 60_000
+
+function interval(start, end) {
+  return { start: Date.parse(start), end: Date.parse(end) }
 }
 
-export function bookingReceipt(booking, draft) {
+export function draftInterval({ start_time, duration_min }) {
+  const start = Date.parse(start_time)
+  return { start, end: start + duration_min * MINUTE_MS }
+}
+
+export function overlapsBooking(existing, wanted) {
+  if (existing.status === "CANCELLED" || !existing.start_time || !existing.end_time) {
+    return false
+  }
+  const booked = interval(existing.start_time, existing.end_time)
+  return booked.start < wanted.end && wanted.start < booked.end
+}
+
+export function bookingReceipt(booking, { note } = {}) {
+  const date = booking.start_time.slice(0, 10)
+  const services = [...new Set((booking.booking_items ?? []).map((item) => item.service_name))]
   return {
     booking_code: booking.booking_code,
     booking_status: booking.status,
-    service: draft.service_name,
-    branch: booking.branch?.branch_name ?? draft.branch_name,
-    branch_address: booking.branch?.branch_address ?? draft.branch_address,
-    date: draft.date,
-    weekday: draft.weekday,
-    time: draft.time,
-    guests: draft.guests,
-    note: draft.note,
-    full_name: booking.customer?.full_name ?? draft.full_name,
-    mobile: booking.customer?.mobile ?? draft.mobile,
+    service: services.join(", "),
+    branch: booking.branch?.branch_name,
+    branch_address: booking.branch?.branch_address,
+    date,
+    weekday: weekdayOf(date),
+    time: booking.start_time.slice(11, 16),
+    guests: booking.guest_count,
+    note,
+    full_name: booking.customer?.full_name,
+    mobile: booking.customer?.mobile,
   }
 }
 
